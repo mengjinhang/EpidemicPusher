@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}报告管理 - 疫情报告推送系统{% endblock %}
+{% block page_title %}报告管理{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-header bg-white">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="bi bi-file-earmark-medical me-2"></i>报告列表 ({{ reports.total }})</h6>
+            <div class="text-muted small">
+                <i class="bi bi-folder me-1"></i>扫描目录: <code>{{ scan_dir }}</code>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            将 PDF 或 Word 报告文件放入 <code>{{ scan_dir }}</code> 目录，系统会自动扫描识别。
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>报告标题</th>
+                        <th>类型</th>
+                        <th>大小</th>
+                        <th>摘要</th>
+                        <th>推送次数</th>
+                        <th>录入时间</th>
+                        <th style="width:120px">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reports["items"] %}
+                    <tr>
+                        <td>
+                            {{ r.file_type | file_type_icon | safe }}
+                            <strong class="ms-1">{{ r.title }}</strong>
+                        </td>
+                        <td><span class="badge bg-light text-dark">.{{ r.file_type }}</span></td>
+                        <td class="small">{{ r.file_size | format_size }}</td>
+                        <td class="small text-muted" style="max-width:200px">
+                            {{ r.summary | truncate_text(80) }}
+                        </td>
+                        <td><span class="badge bg-info">{{ r.push_count }}</span></td>
+                        <td class="small text-muted">{{ r.created_at }}</td>
+                        <td>
+                            <a href="{{ url_for('main.push') }}?report_id={{ r.id }}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-send"></i> 推送
+                            </a>
+                            <form action="{{ url_for('main.report_delete', report_id=r.id) }}"
+                                  method="POST" class="d-inline"
+                                  onsubmit="return confirm('确定删除此报告记录？(不会删除文件)')">
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="bi bi-folder2-open fs-1 d-block mb-2"></i>
+                            暂无报告，请将 PDF/Word 文件放入报告目录
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if reports.pages > 1 %}
+        <nav>
+            <ul class="pagination pagination-sm justify-content-center">
+                {% for p in range(1, reports.pages + 1) %}
+                <li class="page-item {% if p == reports.page %}active{% endif %}">
+                    <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

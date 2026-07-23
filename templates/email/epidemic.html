@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:'Microsoft YaHei','Helvetica Neue',Arial,sans-serif;background:#f5f5f5">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:20px 0">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+    <!-- Header -->
+    <tr>
+        <td style="background:linear-gradient(135deg,#1a5276,#2980b9);padding:24px 30px;color:#fff">
+            <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td>
+                        <h2 style="margin:0;font-size:18px">疫情报告推送</h2>
+                        <p style="margin:5px 0 0;font-size:12px;opacity:0.8">Epidemic Report Notification</p>
+                    </td>
+                    <td align="right" style="font-size:28px">&#128202;</td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- Greeting -->
+    <tr>
+        <td style="padding:30px 30px 10px">
+            <p style="color:#333;line-height:1.8;margin:0;font-size:15px">
+                尊敬的<strong>{{ recipient_name | default('老师') }}</strong>，您好！
+            </p>
+            <p style="color:#555;line-height:1.8;margin:10px 0 0;font-size:14px">
+                以下是最新的疫情报告，请查收。
+            </p>
+        </td>
+    </tr>
+
+    <!-- Report Info -->
+    <tr>
+        <td style="padding:15px 30px">
+            <table width="100%" cellpadding="12" cellspacing="0"
+                   style="background:#f0f7ff;border-radius:6px;border-left:4px solid #2980b9">
+                <tr>
+                    <td>
+                        <p style="margin:0 0 8px;color:#1a5276;font-weight:bold;font-size:15px">
+                            &#128196; {{ report_title | default('疫情报告') }}
+                        </p>
+                        {% if report_summary %}
+                        <p style="margin:0;color:#666;font-size:13px;line-height:1.6">
+                            {{ report_summary }}
+                        </p>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    {% if extra_message %}
+    <!-- Extra Message -->
+    <tr>
+        <td style="padding:0 30px 15px">
+            <table width="100%" cellpadding="12" cellspacing="0"
+                   style="background:#fff9e6;border-radius:6px;border-left:4px solid #f39c12">
+                <tr>
+                    <td>
+                        <p style="margin:0;color:#856404;font-size:13px;line-height:1.6">
+                            <strong>&#9888;&#65039; 备注：</strong>{{ extra_message }}
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    {% endif %}
+
+    <!-- Attachment Note -->
+    <tr>
+        <td style="padding:5px 30px 25px">
+            <p style="color:#888;font-size:13px;margin:0;line-height:1.6">
+                &#128206; 详细内容请查看附件中的报告文件。
+            </p>
+        </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+        <td style="background:#f8f9fa;padding:15px 30px;border-top:1px solid #eee">
+            <p style="color:#999;font-size:12px;margin:0;text-align:center;line-height:1.6">
+                此邮件由<strong>疫情报告推送系统</strong>自动发送，请勿直接回复。<br>
+                如需退订，请联系管理员。
+            </p>
+        </td>
+    </tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

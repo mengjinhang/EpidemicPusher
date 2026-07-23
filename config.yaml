@@ -1,0 +1,69 @@
+database:
+  path: data/app.db
+push:
+  batch_size: 50
+  max_workers: 5
+  rate_limit: 30
+  retry_delay: 60
+  retry_max: 3
+report:
+  allowed_types:
+  - .pdf
+  - .docx
+  - .doc
+  scan_dir: reports
+scheduled_push:
+  cron: 0 8 * * *
+  enabled: false
+  extra_message: ''
+  report_dir: reports
+  skip_if_pushed: true
+  target_groups: []
+  timezone: Asia/Shanghai
+  today_only: true
+  wait_report:
+    enabled: true
+    retry_interval: 300
+    timeout: 3600
+scheduler:
+  cron: 0 8 * * *
+  enabled: false
+server:
+  debug: true
+  host: 0.0.0.0
+  port: 5000
+smtp:
+  host: ''
+  password: ''
+  port: 465
+  presets:
+    gmail:
+      host: smtp.gmail.com
+      port: 587
+      use_ssl: false
+      use_tls: true
+    netease_126:
+      host: smtp.126.com
+      port: 465
+      use_ssl: true
+      use_tls: false
+    netease_163:
+      host: smtp.163.com
+      port: 465
+      use_ssl: true
+      use_tls: false
+    outlook:
+      host: smtp.office365.com
+      port: 587
+      use_ssl: false
+      use_tls: true
+    qq:
+      host: smtp.qq.com
+      port: 465
+      use_ssl: true
+      use_tls: false
+  sender_email: ''
+  sender_name: 疫情报告推送系统
+  use_ssl: true
+  use_tls: false
+  username: ''

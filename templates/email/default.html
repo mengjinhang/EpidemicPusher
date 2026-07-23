@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:'Microsoft YaHei','Helvetica Neue',Arial,sans-serif;background:#f5f5f5">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:20px 0">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)">
+    <!-- Header -->
+    <tr>
+        <td style="background:#2c3e50;padding:24px 30px;color:#fff">
+            <h2 style="margin:0;font-size:18px">{{ subject | default('通知') }}</h2>
+        </td>
+    </tr>
+    <!-- Body -->
+    <tr>
+        <td style="padding:30px">
+            <p style="color:#333;line-height:1.8;margin:0 0 15px">
+                尊敬的{{ recipient_name | default('用户') }}，您好！
+            </p>
+            <div style="color:#555;line-height:1.8">
+                {{ content | default('') }}
+            </div>
+        </td>
+    </tr>
+    <!-- Footer -->
+    <tr>
+        <td style="background:#f8f9fa;padding:15px 30px;border-top:1px solid #eee">
+            <p style="color:#999;font-size:12px;margin:0;text-align:center">
+                此邮件由疫情报告推送系统自动发送，请勿直接回复。
+            </p>
+        </td>
+    </tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}订阅者管理 - 疫情报告推送系统{% endblock %}
+{% block page_title %}订阅者管理{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <!-- Left: Add + Filter -->
+    <div class="col-lg-4">
+        <!-- Add Form -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-person-plus me-2"></i>添加订阅者</h6></div>
+            <div class="card-body">
+                <form action="{{ url_for('main.subscriber_add') }}" method="POST">
+                    <div class="mb-2">
+                        <label class="form-label small">姓名 <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">邮箱 <span class="text-danger">*</span></label>
+                        <input type="email" name="email" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">分组</label>
+                        <select name="group_id" class="form-select form-select-sm">
+                            <option value="">未分组</option>
+                            {% for g in groups %}
+                            <option value="{{ g.id }}">{{ g.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">备注</label>
+                        <input type="text" name="remark" class="form-control form-control-sm">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">添加</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Import -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-upload me-2"></i>批量导入</h6></div>
+            <div class="card-body">
+                <form action="{{ url_for('main.subscriber_import') }}" method="POST" enctype="multipart/form-data">
+                    <div class="mb-2">
+                        <label class="form-label small">导入文件 (CSV / Excel)</label>
+                        <input type="file" name="file" class="form-control form-control-sm" accept=".csv,.xlsx,.xls" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">默认分组</label>
+                        <select name="group_id" class="form-select form-select-sm">
+                            <option value="">未分组</option>
+                            {% for g in groups %}
+                            <option value="{{ g.id }}">{{ g.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success btn-sm flex-grow-1">导入</button>
+                        <a href="{{ url_for('main.subscriber_template') }}" class="btn btn-outline-secondary btn-sm">下载模板</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Table -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">订阅者列表 ({{ subscribers.total }})</h6>
+                    <form class="d-flex gap-2" method="GET">
+                        <select name="group_id" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                            <option value="">全部分组</option>
+                            {% for g in groups %}
+                            <option value="{{ g.id }}" {% if current_group == g.id %}selected{% endif %}>{{ g.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="status" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                            <option value="">全部状态</option>
+                            <option value="active" {% if current_status == 'active' %}selected{% endif %}>活跃</option>
+                            <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>停用</option>
+                            <option value="bounced" {% if current_status == 'bounced' %}selected{% endif %}>退信</option>
+                        </select>
+                        <input type="text" name="keyword" class="form-control form-control-sm" placeholder="搜索..."
+                               value="{{ current_keyword }}" style="width:120px">
+                        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-search"></i></button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>姓名</th>
+                                <th>邮箱</th>
+                                <th>分组</th>
+                                <th>状态</th>
+                                <th>添加时间</th>
+                                <th style="width:100px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sub in subscribers["items"] %}
+                            <tr>
+                                <td>{{ sub.name }}</td>
+                                <td><code class="small">{{ sub.email }}</code></td>
+                                <td>{{ sub.group_name or '-' }}</td>
+                                <td>{{ sub.status | status_badge | safe }}</td>
+                                <td class="small text-muted">{{ sub.created_at }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                            data-bs-target="#editModal{{ sub.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form action="{{ url_for('main.subscriber_delete', subscriber_id=sub.id) }}"
+                                          method="POST" class="d-inline"
+                                          onsubmit="return confirm('确定删除?')">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <!-- Edit Modal -->
+                            <div class="modal fade" id="editModal{{ sub.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('main.subscriber_update', subscriber_id=sub.id) }}" method="POST">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title">编辑订阅者</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-2">
+                                                    <label class="form-label small">姓名</label>
+                                                    <input type="text" name="name" class="form-control form-control-sm" value="{{ sub.name }}">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">邮箱</label>
+                                                    <input type="email" name="email" class="form-control form-control-sm" value="{{ sub.email }}">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">分组</label>
+                                                    <select name="group_id" class="form-select form-select-sm">
+                                                        <option value="">未分组</option>
+                                                        {% for g in groups %}
+                                                        <option value="{{ g.id }}" {% if sub.group_id == g.id %}selected{% endif %}>{{ g.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">状态</label>
+                                                    <select name="status" class="form-select form-select-sm">
+                                                        <option value="active" {% if sub.status == 'active' %}selected{% endif %}>活跃</option>
+                                                        <option value="inactive" {% if sub.status == 'inactive' %}selected{% endif %}>停用</option>
+                                                    </select>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">备注</label>
+                                                    <input type="text" name="remark" class="form-control form-control-sm" value="{{ sub.remark }}">
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center text-muted py-4">暂无订阅者</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if subscribers.pages > 1 %}
+                <nav class="px-3 py-2">
+                    <ul class="pagination pagination-sm justify-content-center mb-0">
+                        {% for p in range(1, subscribers.pages + 1) %}
+                        <li class="page-item {% if p == subscribers.page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ p }}&group_id={{ current_group or '' }}&status={{ current_status }}&keyword={{ current_keyword }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

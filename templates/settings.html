@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}系统设置 - 疫情报告推送系统{% endblock %}
+{% block page_title %}系统设置{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-gear me-2"></i>SMTP 邮箱配置</h6></div>
+            <div class="card-body">
+                <form id="smtpForm" action="{{ url_for('main.settings_smtp') }}" method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label small">SMTP 服务器 <span class="text-danger">*</span></label>
+                            <input type="text" name="host" class="form-control form-control-sm"
+                                   value="{{ smtp.host if smtp else '' }}" placeholder="smtp.qq.com" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">端口 <span class="text-danger">*</span></label>
+                            <input type="number" name="port" class="form-control form-control-sm"
+                                   value="{{ smtp.port if smtp else 465 }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">用户名 <span class="text-danger">*</span></label>
+                            <input type="text" name="username" class="form-control form-control-sm"
+                                   value="{{ smtp.username if smtp else '' }}" placeholder="your@email.com" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">密码/授权码 <span class="text-danger">*</span></label>
+                            <input type="password" name="password" class="form-control form-control-sm"
+                                   value="{{ '******' if smtp else '' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">发件人名称</label>
+                            <input type="text" name="sender_name" class="form-control form-control-sm"
+                                   value="{{ smtp.sender_name if smtp else '疫情报告推送系统' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">发件人邮箱 <span class="text-danger">*</span></label>
+                            <input type="email" name="sender_email" class="form-control form-control-sm"
+                                   value="{{ smtp.sender_email if smtp else '' }}" placeholder="your@email.com" required>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="use_ssl" id="useSSL"
+                                       {% if not smtp or smtp.use_ssl %}checked{% endif %}>
+                                <label class="form-check-label small" for="useSSL">使用 SSL</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="use_tls" id="useTLS"
+                                       {% if smtp and smtp.use_tls %}checked{% endif %}>
+                                <label class="form-check-label small" for="useTLS">使用 STARTTLS</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-save me-1"></i>保存配置
+                        </button>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="testSmtp">
+                            <i class="bi bi-plug me-1"></i>测试连接
+                        </button>
+                    </div>
+
+                    <div id="testResult" class="mt-3" style="display:none"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-lightning me-2"></i>快速配置</h6></div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm text-start preset-btn"
+                            data-host="smtp.qq.com" data-port="465" data-ssl="true" data-tls="false">
+                        <strong>QQ 邮箱</strong>
+                        <span class="text-muted ms-2 small">smtp.qq.com:465</span>
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm text-start preset-btn"
+                            data-host="smtp.163.com" data-port="465" data-ssl="true" data-tls="false">
+                        <strong>163 邮箱</strong>
+                        <span class="text-muted ms-2 small">smtp.163.com:465</span>
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm text-start preset-btn"
+                            data-host="smtp.126.com" data-port="465" data-ssl="true" data-tls="false">
+                        <strong>126 邮箱</strong>
+                        <span class="text-muted ms-2 small">smtp.126.com:465</span>
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm text-start preset-btn"
+                            data-host="smtp.gmail.com" data-port="587" data-ssl="false" data-tls="true">
+                        <strong>Gmail</strong>
+                        <span class="text-muted ms-2 small">smtp.gmail.com:587</span>
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm text-start preset-btn"
+                            data-host="smtp.office365.com" data-port="587" data-ssl="false" data-tls="true">
+                        <strong>Outlook</strong>
+                        <span class="text-muted ms-2 small">smtp.office365.com:587</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-question-circle me-2"></i>帮助</h6></div>
+            <div class="card-body small text-muted">
+                <p><strong>QQ 邮箱</strong>: 设置 → 账户 → 生成授权码</p>
+                <p><strong>163 邮箱</strong>: 设置 → POP3/SMTP → 开启并获取授权码</p>
+                <p><strong>Gmail</strong>: 需开启两步验证后创建应用专用密码</p>
+                <p class="mb-0"><strong>注意</strong>: 密码栏填写授权码而非登录密码</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelector('[name=host]').value = btn.dataset.host;
+        document.querySelector('[name=port]').value = btn.dataset.port;
+        document.getElementById('useSSL').checked = btn.dataset.ssl === 'true';
+        document.getElementById('useTLS').checked = btn.dataset.tls === 'true';
+    });
+});
+
+document.getElementById('testSmtp').addEventListener('click', async () => {
+    const form = document.getElementById('smtpForm');
+    const data = new FormData(form);
+    const result = document.getElementById('testResult');
+    result.style.display = 'block';
+    result.className = 'mt-3 alert alert-info';
+    result.textContent = '正在测试连接...';
+
+    try {
+        const resp = await fetch('{{ url_for("main.settings_smtp_test") }}', {method: 'POST', body: data});
+        const json = await resp.json();
+        result.className = json.success ? 'mt-3 alert alert-success' : 'mt-3 alert alert-danger';
+        result.textContent = json.message;
+    } catch (e) {
+        result.className = 'mt-3 alert alert-danger';
+        result.textContent = '测试请求失败: ' + e.message;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}仪表盘 - 疫情报告推送系统{% endblock %}
+{% block page_title %}仪表盘{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-primary mb-2"><i class="bi bi-people fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.total_subscribers }}</div>
+                <div class="stat-label text-muted small">活跃订阅者</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-success mb-2"><i class="bi bi-file-earmark-medical fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.total_reports }}</div>
+                <div class="stat-label text-muted small">报告总数</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-info mb-2"><i class="bi bi-send-check fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.total_sent }}</div>
+                <div class="stat-label text-muted small">累计发送</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-warning mb-2"><i class="bi bi-envelope-check fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.today_sent }}</div>
+                <div class="stat-label text-muted small">今日发送</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-danger mb-2"><i class="bi bi-x-circle fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.total_failed }}</div>
+                <div class="stat-label text-muted small">发送失败</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 col-lg-2">
+        <div class="card stat-card border-0 shadow-sm">
+            <div class="card-body text-center">
+                <div class="stat-icon text-success mb-2"><i class="bi bi-graph-up fs-3"></i></div>
+                <div class="stat-value fs-4 fw-bold">{{ stats.success_rate }}%</div>
+                <div class="stat-label text-muted small">成功率</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- 7 Day Chart -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom">
+                <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>近 7 天发送统计</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    {% for day in daily_stats %}
+                    <div class="chart-bar-group">
+                        <div class="chart-bars">
+                            <div class="chart-bar bg-success" style="height: {{ [day.success * 3, 2] | max }}px"
+                                 title="成功: {{ day.success }}"></div>
+                            <div class="chart-bar bg-danger" style="height: {{ [day.failed * 3, 2] | max }}px"
+                                 title="失败: {{ day.failed }}"></div>
+                        </div>
+                        <div class="chart-label small text-muted">{{ day.date }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-center gap-4 mt-3">
+                    <span class="small"><span class="badge bg-success">&nbsp;</span> 成功</span>
+                    <span class="small"><span class="badge bg-danger">&nbsp;</span> 失败</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Batches -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white border-bottom">
+                <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>最近推送</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_batches %}
+                <div class="list-group list-group-flush">
+                    {% for batch in recent_batches %}
+                    <a href="{{ url_for('main.logs', batch_id=batch.batch_id) }}"
+                       class="list-group-item list-group-item-action py-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-bold small">{{ batch.report_title | truncate_text(30) }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem">{{ batch.created_at }}</div>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success">{{ batch.success }}</span>
+                                {% if batch.failed > 0 %}
+                                <span class="badge bg-danger">{{ batch.failed }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <p class="mt-2">暂无推送记录</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

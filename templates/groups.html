@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}分组管理 - 疫情报告推送系统{% endblock %}
+{% block page_title %}分组管理{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-plus-circle me-2"></i>创建分组</h6></div>
+            <div class="card-body">
+                <form action="{{ url_for('main.group_add') }}" method="POST">
+                    <div class="mb-2">
+                        <label class="form-label small">分组名称 <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control form-control-sm" placeholder="如：教师组" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">描述</label>
+                        <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="分组描述..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">创建</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0">分组列表 ({{ groups | length }})</h6></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>分组名称</th>
+                                <th>描述</th>
+                                <th>总订阅者</th>
+                                <th>活跃</th>
+                                <th>创建时间</th>
+                                <th style="width:120px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for g in groups %}
+                            <tr>
+                                <td><strong>{{ g.name }}</strong></td>
+                                <td class="text-muted small">{{ g.description or '-' }}</td>
+                                <td><span class="badge bg-secondary">{{ g.subscriber_count }}</span></td>
+                                <td><span class="badge bg-success">{{ g.active_count }}</span></td>
+                                <td class="small text-muted">{{ g.created_at }}</td>
+                                <td>
+                                    <a href="{{ url_for('main.subscribers', group_id=g.id) }}"
+                                       class="btn btn-sm btn-outline-info" title="查看成员">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                            data-bs-target="#editGroup{{ g.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form action="{{ url_for('main.group_delete', group_id=g.id) }}"
+                                          method="POST" class="d-inline"
+                                          onsubmit="return confirm('确定删除分组？组内成员将移至未分组')">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+
+                            <div class="modal fade" id="editGroup{{ g.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('main.group_update', group_id=g.id) }}" method="POST">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title">编辑分组</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-2">
+                                                    <label class="form-label small">分组名称</label>
+                                                    <input type="text" name="name" class="form-control form-control-sm" value="{{ g.name }}">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">描述</label>
+                                                    <textarea name="description" class="form-control form-control-sm" rows="2">{{ g.description }}</textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+                                                <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <tr><td colspan="6" class="text-center text-muted py-4">暂无分组，请先创建</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

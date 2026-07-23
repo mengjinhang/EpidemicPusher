@@ -1,0 +1,164 @@
+/* Sidebar */
+.sidebar {
+    width: 240px;
+    min-height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    overflow-y: auto;
+    transition: transform 0.3s;
+}
+
+.sidebar .nav-link {
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar .nav-link.active {
+    background: rgba(255, 255, 255, 0.15);
+    font-weight: 600;
+}
+
+/* Main Content */
+.main-content {
+    margin-left: 240px;
+    min-height: 100vh;
+    background: #f5f6fa;
+}
+
+.content-wrapper {
+    max-width: 1200px;
+}
+
+/* Stat Cards */
+.stat-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Chart */
+.chart-container {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    height: 200px;
+    padding: 20px 0;
+}
+
+.chart-bar-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+}
+
+.chart-bars {
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    min-height: 150px;
+}
+
+.chart-bar {
+    width: 20px;
+    min-height: 2px;
+    border-radius: 3px 3px 0 0;
+    transition: height 0.3s;
+    cursor: pointer;
+}
+
+.chart-bar:hover {
+    opacity: 0.8;
+}
+
+.chart-label {
+    margin-top: 8px;
+}
+
+/* Table */
+.table th {
+    font-size: 13px;
+    font-weight: 600;
+    color: #666;
+    white-space: nowrap;
+}
+
+.table td {
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+/* Card header */
+.card-header h6 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+/* Push task progress */
+.push-task .progress {
+    border-radius: 4px;
+}
+
+/* Badge */
+.badge {
+    font-weight: 500;
+    font-size: 11px;
+}
+
+/* Form */
+.form-label {
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+/* Alert */
+.alert {
+    font-size: 13px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #aaa;
+}

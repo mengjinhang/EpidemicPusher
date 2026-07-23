@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}定时推送 - 疫情报告推送系统{% endblock %}
+{% block page_title %}定时推送{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <!-- Left: Config -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>定时推送配置</h6>
+                    {% if sp_config.get("enabled") %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>运行中</span>
+                    {% else %}
+                    <span class="badge bg-secondary">未启用</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('main.scheduled_push_save') }}" method="POST">
+                    <!-- Enable Switch -->
+                    <div class="mb-3 p-3 bg-light rounded">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="sp_enabled" id="spEnabled"
+                                   {% if sp_config.get("enabled") %}checked{% endif %}>
+                            <label class="form-check-label" for="spEnabled">
+                                <strong>启用定时推送</strong>
+                            </label>
+                        </div>
+                        <div class="text-muted small mt-1 ms-4">
+                            系统将按设定时间自动扫描报告目录，找到当天最新报告后推送给目标订阅者
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Time -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">推送时间</label>
+                            {% set cron_parts = sp_config.get("cron", "0 8 * * *").split() %}
+                            <div class="d-flex gap-2">
+                                <select name="sp_hour" class="form-select form-select-sm">
+                                    {% for h in range(24) %}
+                                    <option value="{{ h }}" {% if h == (cron_parts[1] | int) %}selected{% endif %}>
+                                        {{ "%02d" | format(h) }} 时
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <select name="sp_minute" class="form-select form-select-sm">
+                                    {% for m in range(0, 60, 5) %}
+                                    <option value="{{ m }}" {% if m == (cron_parts[0] | int) %}selected{% endif %}>
+                                        {{ "%02d" | format(m) }} 分
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Target Groups -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">推送目标</label>
+                            <div class="border rounded p-2" style="max-height:130px;overflow-y:auto">
+                                {% set selected_groups = sp_config.get("target_groups", []) %}
+                                {% if groups %}
+                                    {% for g in groups %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="sp_groups"
+                                               value="{{ g.name }}" id="spGroup{{ g.id }}"
+                                               {% if g.name in selected_groups %}checked{% endif %}>
+                                        <label class="form-check-label small" for="spGroup{{ g.id }}">
+                                            {{ g.name }}
+                                            <span class="badge bg-success ms-1">{{ g.active_count }}</span>
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted small">暂无分组</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-muted small mt-1">不选则推送给所有活跃订阅者</div>
+                        </div>
+
+                        <!-- Extra message -->
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">附加信息</label>
+                            <input type="text" name="sp_extra_message" class="form-control form-control-sm"
+                                   value="{{ sp_config.get('extra_message', '') }}"
+                                   placeholder="如: 请各位老师及时查阅本日疫情报告">
+                        </div>
+
+                        <!-- Options -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">推送策略</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sp_today_only" id="spTodayOnly"
+                                       {% if sp_config.get("today_only", true) %}checked{% endif %}>
+                                <label class="form-check-label small" for="spTodayOnly">仅推送当天生成的报告</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sp_skip_if_pushed" id="spSkip"
+                                       {% if sp_config.get("skip_if_pushed", true) %}checked{% endif %}>
+                                <label class="form-check-label small" for="spSkip">同一份报告不重复推送</label>
+                            </div>
+                        </div>
+
+                        <!-- Wait for report -->
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">等待报告生成</label>
+                            {% set wait_config = sp_config.get("wait_report", {}) or {} %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="sp_wait_enabled" id="spWait"
+                                       {% if wait_config.get("enabled", true) %}checked{% endif %}>
+                                <label class="form-check-label small" for="spWait">
+                                    到点时报告未就绪，自动等待重试
+                                </label>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" name="sp_wait_interval" class="form-control"
+                                               value="{{ wait_config.get('retry_interval', 300) }}" min="60">
+                                        <span class="input-group-text">秒/次</span>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" name="sp_wait_timeout" class="form-control"
+                                               value="{{ wait_config.get('timeout', 3600) }}" min="300">
+                                        <span class="input-group-text">秒超时</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-save me-1"></i>保存配置
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Status + History -->
+    <div class="col-lg-5">
+        <!-- Scheduler Status -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-activity me-2"></i>调度状态</h6>
+            </div>
+            <div class="card-body">
+                {% if scheduler_jobs %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead class="table-light">
+                            <tr><th>任务</th><th>cron</th><th>下次执行</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for job in scheduler_jobs %}
+                            <tr>
+                                <td>
+                                    <code class="small">{{ job.id }}</code>
+                                    {% if job.type == 'scheduled_push' %}
+                                    <span class="badge bg-primary ms-1">自动</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small"><code>{{ job.cron }}</code></td>
+                                <td class="small text-muted">{{ job.next_run }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    <i class="bi bi-pause-circle fs-3 d-block mb-2"></i>
+                    <span class="small">暂无活动的调度任务</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Push History -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>自动推送记录</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_logs %}
+                <div class="list-group list-group-flush">
+                    {% for log in recent_logs %}
+                    <a href="{{ url_for('main.logs', batch_id=log.batch_id) }}"
+                       class="list-group-item list-group-item-action py-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <div class="fw-bold small">{{ log.title }}</div>
+                                <div class="text-muted" style="font-size:0.75rem">{{ log.pushed_at }}</div>
+                            </div>
+                            <code class="small">{{ log.batch_id }}</code>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                    <span class="small">暂无自动推送记录</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- How it works -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>工作流程</h6>
+            </div>
+            <div class="card-body small text-muted">
+                <ol class="mb-0 ps-3">
+                    <li class="mb-1">到达设定时间后，系统自动扫描报告目录</li>
+                    <li class="mb-1">查找当天生成的最新 PDF/Word 报告</li>
+                    <li class="mb-1">如果报告未就绪且启用了等待，每隔 N 秒重试</li>
+                    <li class="mb-1">找到报告后，向目标分组的所有活跃订阅者发送邮件</li>
+                    <li>已推送过的报告不会重复发送</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

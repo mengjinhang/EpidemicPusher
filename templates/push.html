@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}推送发送 - 疫情报告推送系统{% endblock %}
+{% block page_title %}推送发送{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-send me-2"></i>创建推送任务</h6></div>
+            <div class="card-body">
+                {% if not reports %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    暂无可用报告，请先将报告文件放入报告目录并在
+                    <a href="{{ url_for('main.reports') }}">报告管理</a> 中确认。
+                </div>
+                {% else %}
+                <form action="{{ url_for('main.push_send') }}" method="POST"
+                      onsubmit="return confirm('确定发送推送？')">
+                    <div class="mb-3">
+                        <label class="form-label">选择报告 <span class="text-danger">*</span></label>
+                        <select name="report_id" class="form-select" required>
+                            <option value="">请选择...</option>
+                            {% for r in reports %}
+                            <option value="{{ r.id }}"
+                                {% if request.args.get('report_id', type=int) == r.id %}selected{% endif %}>
+                                {{ r.title }} (.{{ r.file_type }}, {{ r.file_size | format_size }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">选择目标分组</label>
+                        <div class="text-muted small mb-2">不选择则发送给所有活跃订阅者</div>
+                        {% for g in groups %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="group_ids"
+                                   value="{{ g.id }}" id="group{{ g.id }}">
+                            <label class="form-check-label" for="group{{ g.id }}">
+                                {{ g.name }}
+                                <span class="badge bg-success ms-1">{{ g.active_count }} 人</span>
+                            </label>
+                        </div>
+                        {% endfor %}
+                        {% if not groups %}
+                        <div class="text-muted small">暂无分组，将发送给所有活跃订阅者</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">附加信息 (可选)</label>
+                        <textarea name="extra_message" class="form-control" rows="3"
+                                  placeholder="如：请各位老师注意本周新增数据..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-send me-1"></i>开始推送
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <!-- Active Tasks -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-activity me-2"></i>进行中的任务</h6>
+            </div>
+            <div class="card-body" id="activeTasks">
+                {% if active_tasks %}
+                    {% for task in active_tasks %}
+                    <div class="push-task mb-3 p-3 border rounded" data-batch="{{ task.batch_id }}">
+                        <div class="d-flex justify-content-between mb-2">
+                            <strong class="small">{{ task.report_title }}</strong>
+                            <span class="badge bg-info">{{ task.status }}</span>
+                        </div>
+                        <div class="progress mb-2" style="height: 8px">
+                            <div class="progress-bar bg-success" style="width: {{ task.progress_pct }}%"></div>
+                        </div>
+                        <div class="d-flex justify-content-between small text-muted">
+                            <span>成功: {{ task.success }} / 失败: {{ task.failed }}</span>
+                            <span>{{ task.progress_pct }}%</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-check-circle fs-3 d-block mb-2"></i>
+                    <span class="small">当前没有进行中的任务</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white"><h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>推送说明</h6></div>
+            <div class="card-body small text-muted">
+                <ul class="mb-0 ps-3">
+                    <li>系统支持并发发送，自动限流防封号</li>
+                    <li>发送失败的邮件会自动重试（最多 3 次）</li>
+                    <li>连续退信的邮箱会被自动标记为"退信"状态</li>
+                    <li>推送记录可在"发送记录"页面查看</li>
+                    <li>请确保已在"系统设置"中配置 SMTP 邮箱</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
