@@ -96,22 +96,25 @@ class SubscriberImporter:
 
         result = ImportResult()
         wb = openpyxl.load_workbook(file_path, read_only=True)
-        ws = wb.active
+        try:
+            ws = wb.active
 
-        rows = list(ws.iter_rows(values_only=True))
-        if len(rows) < 2:
-            raise ImportError_("Excel 文件为空或只有表头")
+            rows = list(ws.iter_rows(values_only=True))
+            if len(rows) < 2:
+                raise ImportError_("Excel 文件为空或只有表头")
 
-        headers = [str(h).strip().lower() if h else "" for h in rows[0]]
-        missing = cls.REQUIRED_FIELDS - set(headers)
-        if missing:
-            raise ImportError_(f"Excel 缺少必要列: {', '.join(missing)}")
+            headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+            missing = cls.REQUIRED_FIELDS - set(headers)
+            if missing:
+                raise ImportError_(f"Excel 缺少必要列: {', '.join(missing)}")
 
-        for row_num, row_data in enumerate(rows[1:], start=2):
-            row = {headers[i]: row_data[i] for i in range(len(headers)) if i < len(row_data)}
-            cls._import_row(row, row_num, default_group_id, result)
+            for row_num, row_data in enumerate(rows[1:], start=2):
+                row = {headers[i]: row_data[i] for i in range(len(headers)) if i < len(row_data)}
+                cls._import_row(row, row_num, default_group_id, result)
+        finally:
+            # Windows 上句柄不释放会导致临时文件无法删除
+            wb.close()
 
-        wb.close()
         db.session.commit()
 
         logger.info(
@@ -160,6 +163,11 @@ class SubscriberImporter:
             remark=remark,
         )
         db.session.add(subscriber)
+        db.session.flush()
+
+        from epidemic_pusher.subscriber.manager import SubscriberManager
+        SubscriberManager.relink_send_logs(subscriber)
+
         result.add_success()
 
     @classmethod

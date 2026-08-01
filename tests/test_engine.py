@@ -120,6 +120,52 @@ class TestPushEngine:
                 engine.push(report_id=report.id, group_ids=[999])
 
 
+class TestPushExecution:
+
+    def test_push_completes_after_request_context_gone(self, app, tmp_path):
+        """回归: 推送线程不得依赖发起请求时的 ORM 对象/session (DetachedInstanceError)。"""
+        report_file = tmp_path / "report.pdf"
+        report_file.write_bytes(b"%PDF-1.4 test")
+
+        with app.app_context():
+            setup_test_data(app)
+            report = Report.query.first()
+            report.file_path = str(report_file)
+            db.session.commit()
+            report_id = report.id
+
+        with patch("epidemic_pusher.push.engine.EmailSender") as mock_sender, \
+                patch("epidemic_pusher.push.engine.EmailBuilder") as mock_builder:
+            mock_sender.return_value.send_with_retry.return_value = True
+            mock_builder.return_value.build_report_email.return_value = MagicMock()
+
+            engine = PushEngine(app, max_workers=2)
+
+            # 模拟 Web 请求: 独立的 app context 发起推送, 随后立即销毁 session
+            with app.app_context():
+                result = engine.push(report_id=report_id)
+                db.session.remove()
+
+            assert result["total"] == 2
+            batch_id = result["batch_id"]
+
+            import time
+            for _ in range(100):
+                if batch_id not in engine._active_tasks:
+                    break
+                time.sleep(0.05)
+            else:
+                pytest.fail("推送任务未在预期时间内完成")
+
+        with app.app_context():
+            logs = SendLog.query.filter_by(batch_id=batch_id).all()
+            assert len(logs) == 2
+            assert all(log.status == "success" for log in logs)
+            assert {log.subscriber_email for log in logs} == {
+                "zhang@example.com", "li@example.com",
+            }
+
+
 class TestPushTracker:
 
     def test_dashboard_stats_empty(self, app):

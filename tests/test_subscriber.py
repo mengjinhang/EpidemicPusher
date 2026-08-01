@@ -5,7 +5,7 @@ import pytest
 
 from app import create_app
 from epidemic_pusher.database import db
-from epidemic_pusher.models import Subscriber, Group
+from epidemic_pusher.models import Subscriber, Group, Report, SendLog
 from epidemic_pusher.subscriber.manager import SubscriberManager, SubscriberError
 from epidemic_pusher.subscriber.group import GroupManager, GroupError
 
@@ -178,3 +178,59 @@ class TestSubscriberManager:
             SubscriberManager.add("A", "a@example.com")
             SubscriberManager.add("B", "b@example.com")
             assert SubscriberManager.count() == 2
+
+
+class TestSubscriberDeleteWithLogs:
+
+    @staticmethod
+    def _add_send_log(subscriber, batch_id="batch-1"):
+        report = Report(title="测试报告", file_path="/tmp/report.pdf", file_type="pdf")
+        db.session.add(report)
+        db.session.flush()
+        log = SendLog(
+            report_id=report.id,
+            subscriber_id=subscriber.id,
+            subscriber_email=subscriber.email,
+            subscriber_name=subscriber.name,
+            batch_id=batch_id,
+            status="success",
+        )
+        db.session.add(log)
+        db.session.commit()
+        return log
+
+    def test_delete_subscriber_keeps_send_logs(self, app):
+        with app.app_context():
+            sub = SubscriberManager.add("有记录", "haslog@example.com")
+            self._add_send_log(sub)
+
+            SubscriberManager.delete(sub.id)
+
+            log = SendLog.query.filter_by(batch_id="batch-1").first()
+            assert log is not None
+            assert log.subscriber_id is None
+            data = log.to_dict()
+            assert data["subscriber_email"] == "haslog@example.com"
+            assert data["subscriber_name"] == "有记录"
+
+    def test_readd_subscriber_relinks_send_logs(self, app):
+        with app.app_context():
+            sub = SubscriberManager.add("张三", "relink@example.com")
+            self._add_send_log(sub)
+            SubscriberManager.delete(sub.id)
+
+            new_sub = SubscriberManager.add("张三回归", "relink@example.com")
+
+            log = SendLog.query.filter_by(batch_id="batch-1").first()
+            assert log.subscriber_id == new_sub.id
+
+    def test_delete_batch_keeps_send_logs(self, app):
+        with app.app_context():
+            sub = SubscriberManager.add("批量删", "batchdel@example.com")
+            self._add_send_log(sub)
+
+            SubscriberManager.delete_batch([sub.id])
+
+            log = SendLog.query.filter_by(batch_id="batch-1").first()
+            assert log.subscriber_id is None
+            assert log.subscriber_email == "batchdel@example.com"

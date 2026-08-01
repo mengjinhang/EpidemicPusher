@@ -1,3 +1,4 @@
+import os
 import uuid
 import logging
 import threading
@@ -18,10 +19,9 @@ class PushError(Exception):
 
 class PushTask:
 
-    def __init__(self, batch_id, report, subscribers, total):
+    def __init__(self, batch_id, report_title, total):
         self.batch_id = batch_id
-        self.report = report
-        self.subscribers = subscribers
+        self.report_title = report_title
         self.total = total
         self.success = 0
         self.failed = 0
@@ -52,7 +52,7 @@ class PushTask:
     def progress(self):
         return {
             "batch_id": self.batch_id,
-            "report_title": self.report.title,
+            "report_title": self.report_title,
             "total": self.total,
             "success": self.success,
             "failed": self.failed,
@@ -79,7 +79,6 @@ class PushEngine:
             if not report:
                 raise PushError(f"报告不存在: ID={report_id}")
 
-            import os
             if not os.path.isfile(report.file_path):
                 raise PushError(f"报告文件不存在: {report.file_path}")
 
@@ -105,24 +104,49 @@ class PushEngine:
 
             batch_id = str(uuid.uuid4())[:8]
 
-            for sub in subscribers:
+            # ORM 对象绑定当前请求的 session, 不能带进后台线程
+            # (请求结束 session 销毁后访问属性会抛 DetachedInstanceError),
+            # 因此这里先转成纯数据再传递
+            report_data = {
+                "id": report.id,
+                "title": report.title,
+                "summary": report.summary,
+                "file_path": report.file_path,
+            }
+            subscribers_data = [
+                {"id": s.id, "email": s.email, "name": s.name} for s in subscribers
+            ]
+            smtp_data = {
+                "host": smtp_config.host,
+                "port": smtp_config.port,
+                "username": smtp_config.username,
+                "password": smtp_config.password,
+                "use_ssl": smtp_config.use_ssl,
+                "use_tls": smtp_config.use_tls,
+                "sender_name": smtp_config.sender_name,
+                "sender_email": smtp_config.sender_email,
+            }
+
+            for sub in subscribers_data:
                 log = SendLog(
-                    report_id=report.id,
-                    subscriber_id=sub.id,
+                    report_id=report_data["id"],
+                    subscriber_id=sub["id"],
+                    subscriber_email=sub["email"],
+                    subscriber_name=sub["name"],
                     batch_id=batch_id,
                     status="pending",
                 )
                 db.session.add(log)
             db.session.commit()
 
-            task = PushTask(batch_id, report, subscribers, len(subscribers))
+            task = PushTask(batch_id, report_data["title"], len(subscribers_data))
 
             with self._lock:
                 self._active_tasks[batch_id] = task
 
             thread = threading.Thread(
                 target=self._execute_push,
-                args=(batch_id, report, subscribers, smtp_config, extra_message),
+                args=(batch_id, report_data, subscribers_data, smtp_data, extra_message),
                 daemon=True,
             )
             thread.start()
@@ -130,33 +154,24 @@ class PushEngine:
             logger.info(
                 "推送任务已创建: batch=%s, report=%s, 收件人=%d",
                 batch_id,
-                report.title,
-                len(subscribers),
+                report_data["title"],
+                len(subscribers_data),
             )
             return task.progress
 
-    def _execute_push(self, batch_id, report, subscribers, smtp_config, extra_message):
+    def _execute_push(self, batch_id, report_data, subscribers_data, smtp_data, extra_message):
         with self.app.app_context():
             task = self._active_tasks.get(batch_id)
             if not task:
                 return
 
-            sender_config = {
-                "host": smtp_config.host,
-                "port": smtp_config.port,
-                "username": smtp_config.username,
-                "password": smtp_config.password,
-                "use_ssl": smtp_config.use_ssl,
-                "use_tls": smtp_config.use_tls,
-            }
-
-            email_sender = EmailSender(sender_config, rate_limit=self.rate_limit)
-            email_builder = EmailBuilder(smtp_config.sender_name, smtp_config.sender_email)
+            email_sender = EmailSender(smtp_data, rate_limit=self.rate_limit)
+            email_builder = EmailBuilder(smtp_data["sender_name"], smtp_data["sender_email"])
 
             try:
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                     futures = {}
-                    for sub in subscribers:
+                    for sub in subscribers_data:
                         if task.is_cancelled:
                             break
 
@@ -164,7 +179,7 @@ class PushEngine:
                             self._send_single,
                             email_sender,
                             email_builder,
-                            report,
+                            report_data,
                             sub,
                             batch_id,
                             extra_message,
@@ -189,7 +204,7 @@ class PushEngine:
                 email_sender.close()
                 task.status = "completed"
 
-                report = Report.query.get(report.id)
+                report = Report.query.get(report_data["id"])
                 if report:
                     report.push_count = (report.push_count or 0) + 1
                     db.session.commit()
@@ -204,11 +219,11 @@ class PushEngine:
                     task.failed,
                 )
 
-    def _send_single(self, email_sender, email_builder, report, subscriber, batch_id, extra_message):
+    def _send_single(self, email_sender, email_builder, report_data, sub_data, batch_id, extra_message):
         with self.app.app_context():
             log = SendLog.query.filter_by(
                 batch_id=batch_id,
-                subscriber_id=subscriber.id,
+                subscriber_id=sub_data["id"],
             ).first()
 
             if not log:
@@ -219,17 +234,17 @@ class PushEngine:
                 db.session.commit()
 
                 message = email_builder.build_report_email(
-                    to_email=subscriber.email,
-                    to_name=subscriber.name,
-                    report_title=report.title,
-                    report_summary=report.summary or "请查看附件",
-                    report_file_path=report.file_path,
+                    to_email=sub_data["email"],
+                    to_name=sub_data["name"],
+                    report_title=report_data["title"],
+                    report_summary=report_data["summary"] or "请查看附件",
+                    report_file_path=report_data["file_path"],
                     extra_message=extra_message,
                 )
 
                 email_sender.send_with_retry(
                     message=message,
-                    recipient=subscriber.email,
+                    recipient=sub_data["email"],
                     max_retries=self.retry_max,
                     base_delay=self.retry_delay,
                 )
@@ -247,17 +262,19 @@ class PushEngine:
                 db.session.commit()
 
                 if not e.retryable:
-                    subscriber.status = "bounced"
-                    db.session.commit()
+                    subscriber = Subscriber.query.get(sub_data["id"])
+                    if subscriber:
+                        subscriber.status = "bounced"
+                        db.session.commit()
 
-                logger.warning("发送失败 [%s]: %s", subscriber.email, e.reason)
+                logger.warning("发送失败 [%s]: %s", sub_data["email"], e.reason)
                 return False
 
             except Exception as e:
                 log.status = "failed"
                 log.error_msg = str(e)
                 db.session.commit()
-                logger.error("发送异常 [%s]: %s", subscriber.email, e)
+                logger.error("发送异常 [%s]: %s", sub_data["email"], e)
                 return False
 
     def get_task_progress(self, batch_id):

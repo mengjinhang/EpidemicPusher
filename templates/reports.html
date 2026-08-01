@@ -8,8 +8,12 @@
     <div class="card-header bg-white">
         <div class="d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="bi bi-file-earmark-medical me-2"></i>报告列表 ({{ reports.total }})</h6>
-            <div class="text-muted small">
-                <i class="bi bi-folder me-1"></i>扫描目录: <code>{{ scan_dir }}</code>
+            <div class="text-muted small d-flex align-items-center gap-2">
+                <span><i class="bi bi-folder me-1"></i>扫描目录: <code>{{ scan_dir }}</code></span>
+                <button type="button" class="btn btn-sm btn-outline-secondary"
+                        data-bs-toggle="modal" data-bs-target="#dirPickerModal">
+                    <i class="bi bi-folder2-open me-1"></i>更改目录
+                </button>
             </div>
         </div>
     </div>
@@ -82,4 +86,117 @@
         {% endif %}
     </div>
 </div>
+
+<!-- 目录选择器 -->
+<div class="modal fade" id="dirPickerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-folder2-open me-2"></i>选择报告扫描目录</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text">当前位置</span>
+                    <input type="text" class="form-control font-monospace" id="dirPickerPath"
+                           value="{{ scan_dir }}" placeholder="输入路径后回车可直接跳转">
+                    <button class="btn btn-outline-secondary" type="button" id="dirPickerGo">跳转</button>
+                </div>
+                <div class="list-group list-group-flush border rounded" id="dirPickerList"
+                     style="min-height:280px;max-height:45vh;overflow-y:auto"></div>
+                <div class="text-danger small mt-2 d-none" id="dirPickerError"></div>
+                <div class="text-muted small mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    单击文件夹进入，选好后点「使用此目录」。系统将扫描该目录下的 PDF / Word 报告文件。
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <form action="{{ url_for('main.reports_scan_dir') }}" method="POST"
+                      class="d-flex gap-2 w-100 justify-content-end mb-0">
+                    <input type="hidden" name="scan_dir" id="dirPickerSelected" value="{{ scan_dir }}">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-check-lg me-1"></i>使用此目录
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('dirPickerModal');
+    const pathInput = document.getElementById('dirPickerPath');
+    const list = document.getElementById('dirPickerList');
+    const errorBox = document.getElementById('dirPickerError');
+    const selected = document.getElementById('dirPickerSelected');
+
+    function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.classList.remove('d-none');
+    }
+
+    function entry(label, targetPath, isParent) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action py-1 small';
+        const icon = document.createElement('i');
+        icon.className = 'bi me-2 ' + (isParent ? 'bi-arrow-90deg-up text-secondary' : 'bi-folder-fill text-warning');
+        btn.appendChild(icon);
+        btn.appendChild(document.createTextNode(label));
+        btn.addEventListener('click', function () { load(targetPath); });
+        return btn;
+    }
+
+    async function load(path) {
+        errorBox.classList.add('d-none');
+        let resp, data;
+        try {
+            resp = await fetch('{{ url_for("main.fs_list_dirs") }}?path=' + encodeURIComponent(path || ''));
+            data = await resp.json();
+        } catch (e) {
+            showError('加载目录失败: ' + e);
+            return;
+        }
+        if (!resp.ok) {
+            showError(data.error || '加载目录失败');
+            return;
+        }
+
+        const isVirtual = data.path === '::drives::';
+        pathInput.value = isVirtual ? '此电脑' : data.path;
+        if (!isVirtual) {
+            selected.value = data.path;
+        }
+        list.innerHTML = '';
+        if (data.parent) {
+            list.appendChild(entry('.. (上一级)', data.parent, true));
+        }
+        data.dirs.forEach(function (d) {
+            list.appendChild(entry(d.name, d.path, false));
+        });
+        if (!data.dirs.length) {
+            const empty = document.createElement('div');
+            empty.className = 'list-group-item text-muted small';
+            empty.textContent = '(无子文件夹)';
+            list.appendChild(empty);
+        }
+    }
+
+    modal.addEventListener('show.bs.modal', function () {
+        load(pathInput.value || '');
+    });
+    function goToInput() {
+        load(pathInput.value === '此电脑' ? '::drives::' : pathInput.value);
+    }
+    document.getElementById('dirPickerGo').addEventListener('click', goToInput);
+    pathInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            goToInput();
+        }
+    });
+})();
+</script>
 {% endblock %}

@@ -127,8 +127,9 @@ class ScheduledPushService:
         try:
             tz = ZoneInfo(tz_name)
         except ZoneInfoNotFoundError:
-            logger.warning("未知时区 %s, 使用 Asia/Shanghai", tz_name)
-            tz = ZoneInfo("Asia/Shanghai")
+            # Windows 上未安装 tzdata 时任何命名时区都不可用, 退回系统本地时区
+            logger.warning("时区 %s 不可用, 使用系统本地时区", tz_name)
+            tz = datetime.now().astimezone().tzinfo
 
         if now is None:
             return datetime.now(tz)

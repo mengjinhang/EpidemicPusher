@@ -18,6 +18,7 @@ def create_app(config_path="config.yaml"):
 
     config = load_config(config_path)
     app.config["APP_CONFIG"] = config
+    app.config["CONFIG_PATH"] = os.path.abspath(config_path)
     app.config["REPORT_SCAN_DIR"] = config.get("report", {}).get("scan_dir", "reports")
 
     setup_logging()

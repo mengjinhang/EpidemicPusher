@@ -1,7 +1,7 @@
 import logging
 
 from epidemic_pusher.database import db
-from epidemic_pusher.models import Subscriber, Group
+from epidemic_pusher.models import Subscriber, Group, SendLog
 from epidemic_pusher.mail.validator import EmailValidator, EmailValidationError
 
 logger = logging.getLogger(__name__)
@@ -36,10 +36,22 @@ class SubscriberManager:
             remark=remark,
         )
         db.session.add(subscriber)
+        db.session.flush()
+        relinked = SubscriberManager.relink_send_logs(subscriber)
         db.session.commit()
 
         logger.info("添加订阅者: %s <%s>", name, EmailValidator.mask_email(email))
+        if relinked:
+            logger.info("重新关联历史发送记录: %d 条 -> ID=%d", relinked, subscriber.id)
         return subscriber
+
+    @staticmethod
+    def relink_send_logs(subscriber):
+        """把同邮箱的孤儿发送日志(订阅者已删除)重新挂到新订阅者上。不 commit。"""
+        return SendLog.query.filter(
+            SendLog.subscriber_id.is_(None),
+            SendLog.subscriber_email == subscriber.email,
+        ).update({"subscriber_id": subscriber.id}, synchronize_session=False)
 
     @staticmethod
     def update(subscriber_id, **kwargs):
@@ -79,6 +91,10 @@ class SubscriberManager:
 
     @staticmethod
     def delete_batch(subscriber_ids):
+        # 批量删除不经过 ORM 级联, 需手动将日志外键置空以保留发送历史
+        SendLog.query.filter(SendLog.subscriber_id.in_(subscriber_ids)).update(
+            {"subscriber_id": None}, synchronize_session=False
+        )
         count = Subscriber.query.filter(Subscriber.id.in_(subscriber_ids)).delete(
             synchronize_session="fetch"
         )

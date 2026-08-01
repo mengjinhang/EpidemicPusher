@@ -96,10 +96,13 @@ class SendLog(db.Model):
     __tablename__ = "send_logs"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    report_id = db.Column(db.Integer, db.ForeignKey("reports.id"), nullable=False)
+    report_id = db.Column(db.Integer, db.ForeignKey("reports.id"), nullable=True)
     subscriber_id = db.Column(
-        db.Integer, db.ForeignKey("subscribers.id"), nullable=False
+        db.Integer, db.ForeignKey("subscribers.id"), nullable=True
     )
+    # 发送时的收件人快照: 订阅者被删除后日志仍可读, 且重新添加同邮箱时可按此重新关联
+    subscriber_email = db.Column(db.String(200), default="")
+    subscriber_name = db.Column(db.String(100), default="")
     batch_id = db.Column(db.String(36), nullable=False)
     status = db.Column(db.String(20), default="pending")  # pending, sending, success, failed, retry
     error_msg = db.Column(db.Text, default="")
@@ -111,8 +114,12 @@ class SendLog(db.Model):
         return {
             "id": self.id,
             "report_title": self.report.title if self.report else None,
-            "subscriber_name": self.subscriber.name if self.subscriber else None,
-            "subscriber_email": self.subscriber.email if self.subscriber else None,
+            "subscriber_name": (
+                self.subscriber.name if self.subscriber else (self.subscriber_name or None)
+            ),
+            "subscriber_email": (
+                self.subscriber.email if self.subscriber else (self.subscriber_email or None)
+            ),
             "batch_id": self.batch_id,
             "status": self.status,
             "error_msg": self.error_msg,

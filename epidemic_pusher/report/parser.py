@@ -123,9 +123,12 @@ class ReportParser:
     @classmethod
     def _extract_pdf_summary(cls, file_path, max_length):
         try:
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
         except ImportError:
-            return "(需安装 PyPDF2 以提取 PDF 摘要)"
+            try:
+                from PyPDF2 import PdfReader
+            except ImportError:
+                return "(需安装 pypdf 以提取 PDF 摘要)"
 
         reader = PdfReader(file_path)
         text_parts = []

@@ -123,9 +123,12 @@ class ReportConverter:
     @classmethod
     def _pdf_to_text(cls, file_path):
         try:
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
         except ImportError:
-            raise ConvertError("请安装 PyPDF2")
+            try:
+                from PyPDF2 import PdfReader
+            except ImportError:
+                raise ConvertError("请安装 pypdf: pip install pypdf")
 
         reader = PdfReader(file_path)
         text_parts = []

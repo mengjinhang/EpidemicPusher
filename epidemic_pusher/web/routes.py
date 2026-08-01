@@ -29,6 +29,25 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("main", __name__)
 
+def _persist_config(sections):
+    """把指定的配置段写回启动时使用的配置文件, 保留文件中的其他配置。"""
+    import yaml
+
+    config_path = current_app.config.get("CONFIG_PATH", "")
+    if not config_path or not os.path.isfile(config_path):
+        return
+    with open(config_path, "r", encoding="utf-8") as f:
+        file_config = yaml.safe_load(f) or {}
+    for key, value in sections.items():
+        if value is not None:
+            existing = file_config.get(key)
+            if isinstance(existing, dict) and isinstance(value, dict):
+                existing.update(value)
+            else:
+                file_config[key] = value
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(file_config, f, allow_unicode=True, default_flow_style=False)
+
 
 # ─── Dashboard ───────────────────────────────────────────────
 
@@ -130,9 +149,11 @@ def subscriber_import():
         flash("仅支持 CSV 和 Excel 文件", "danger")
         return redirect(url_for("main.subscribers"))
 
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        file.save(tmp.name)
-        tmp_path = tmp.name
+    # Windows 不允许再次打开一个已被占用的 NamedTemporaryFile,
+    # 因此先关闭句柄再让 Flask 写入
+    fd, tmp_path = tempfile.mkstemp(suffix=ext)
+    os.close(fd)
+    file.save(tmp_path)
 
     try:
         result = SubscriberImporter.import_file(tmp_path, default_group_id=group_id)
@@ -214,6 +235,88 @@ def reports():
         page=request.args.get("page", 1, type=int),
     )
     return render_template("reports.html", reports=result, scan_dir=os.path.abspath(scan_dir))
+
+
+# Windows 下盘根目录再往上的虚拟层级("此电脑"), 用于切换盘符
+DRIVES_TOKEN = "::drives::"
+
+
+def _windows_drives():
+    import string
+
+    return [
+        {"name": f"{letter}:\\", "path": f"{letter}:\\"}
+        for letter in string.ascii_uppercase
+        if os.path.exists(f"{letter}:\\")
+    ]
+
+
+@bp.route("/api/fs/dirs")
+def fs_list_dirs():
+    """列出指定路径下的子目录, 供目录选择器逐级浏览。"""
+    raw = (request.args.get("path") or "").strip()
+
+    if raw == DRIVES_TOKEN:
+        if os.name != "nt":
+            return jsonify({"error": "当前系统不支持盘符列表"}), 404
+        return jsonify({"path": DRIVES_TOKEN, "parent": None, "dirs": _windows_drives()})
+
+    path = os.path.abspath(os.path.expanduser(raw)) if raw else os.path.expanduser("~")
+
+    if not os.path.isdir(path):
+        return jsonify({"error": f"目录不存在: {path}"}), 404
+
+    try:
+        dirs = sorted(
+            (
+                {"name": entry.name, "path": os.path.join(path, entry.name)}
+                for entry in os.scandir(path)
+                if entry.is_dir(follow_symlinks=False) and not entry.name.startswith(".")
+            ),
+            key=lambda d: d["name"].lower(),
+        )
+    except PermissionError:
+        return jsonify({"error": f"无权限访问: {path}"}), 403
+
+    parent = os.path.dirname(path)
+    if parent == path:
+        # 已到根: Windows 上再往上进入盘符列表, macOS/Linux 上没有更上层
+        parent = DRIVES_TOKEN if os.name == "nt" else None
+
+    return jsonify({
+        "path": path,
+        "parent": parent,
+        "dirs": dirs,
+    })
+
+
+@bp.route("/reports/scan-dir", methods=["POST"])
+def reports_scan_dir():
+    raw = (request.form.get("scan_dir") or "").strip()
+    if not raw:
+        flash("扫描目录不能为空", "danger")
+        return redirect(url_for("main.reports"))
+
+    new_dir = os.path.abspath(os.path.expanduser(raw))
+    if not os.path.isdir(new_dir):
+        flash(f"目录不存在: {new_dir}", "danger")
+        return redirect(url_for("main.reports"))
+
+    current_app.config["REPORT_SCAN_DIR"] = new_dir
+    app_config = current_app.config.get("APP_CONFIG", {})
+    app_config.setdefault("report", {})["scan_dir"] = new_dir
+    # 定时推送扫描的是同一个报告目录, 保持一致
+    if app_config.get("scheduled_push"):
+        app_config["scheduled_push"]["report_dir"] = new_dir
+
+    _persist_config({
+        "report": app_config.get("report"),
+        "scheduled_push": app_config.get("scheduled_push"),
+    })
+
+    logger.info("报告扫描目录已更新: %s", new_dir)
+    flash(f"扫描目录已更新: {new_dir}", "success")
+    return redirect(url_for("main.reports"))
 
 
 @bp.route("/reports/<int:report_id>/delete", methods=["POST"])
@@ -338,8 +441,6 @@ def scheduled_push():
 
 @bp.route("/scheduled-push/save", methods=["POST"])
 def scheduled_push_save():
-    import yaml
-
     enabled = "sp_enabled" in request.form
     hour = request.form.get("sp_hour", "8")
     minute = request.form.get("sp_minute", "0")
@@ -370,15 +471,7 @@ def scheduled_push_save():
         },
     }
 
-    config_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml"
-    )
-    if os.path.isfile(config_path):
-        with open(config_path, "r", encoding="utf-8") as f:
-            file_config = yaml.safe_load(f) or {}
-        file_config["scheduled_push"] = app_config["scheduled_push"]
-        with open(config_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(file_config, f, allow_unicode=True, default_flow_style=False)
+    _persist_config({"scheduled_push": app_config["scheduled_push"]})
 
     push_engine = current_app.config.get("PUSH_ENGINE")
     scheduler = current_app.config.get("PUSH_SCHEDULER")
