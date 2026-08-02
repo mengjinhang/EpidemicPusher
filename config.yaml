@@ -11,12 +11,12 @@ report:
   - .pdf
   - .docx
   - .doc
-  scan_dir: reports
+  scan_dir: /Users/mac/Desktop/Email push
 scheduled_push:
   cron: 0 8 * * *
   enabled: false
   extra_message: ''
-  report_dir: reports
+  report_dir: /Users/mac/Desktop/Email push
   skip_if_pushed: true
   target_groups: []
   timezone: Asia/Shanghai
@@ -30,7 +30,7 @@ scheduler:
   enabled: false
 server:
   debug: true
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: 5000
 smtp:
   host: ''

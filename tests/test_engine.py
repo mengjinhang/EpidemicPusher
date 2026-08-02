@@ -136,7 +136,7 @@ class TestPushExecution:
 
         with patch("epidemic_pusher.push.engine.EmailSender") as mock_sender, \
                 patch("epidemic_pusher.push.engine.EmailBuilder") as mock_builder:
-            mock_sender.return_value.send_with_retry.return_value = True
+            mock_sender.return_value.send.return_value = True
             mock_builder.return_value.build_report_email.return_value = MagicMock()
 
             engine = PushEngine(app, max_workers=2)

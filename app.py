@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     app = create_app()
     app.run(
-        host=server.get("host", "0.0.0.0"),
+        host=server.get("host", "127.0.0.1"),
         port=server.get("port", 5000),
-        debug=server.get("debug", True),
+        debug=server.get("debug", False),
     )

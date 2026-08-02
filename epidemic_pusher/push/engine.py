@@ -1,9 +1,10 @@
 import os
+import time
 import uuid
 import logging
 import threading
+from collections import deque
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from epidemic_pusher.database import db
 from epidemic_pusher.models import Subscriber, Report, SendLog, SmtpConfig
@@ -48,6 +49,10 @@ class PushTask:
     def is_cancelled(self):
         return self._cancel_event.is_set()
 
+    def wait_cancelled(self, timeout):
+        """等待 timeout 秒, 期间被取消则立即返回 True。"""
+        return self._cancel_event.wait(timeout)
+
     @property
     def progress(self):
         return {
@@ -66,6 +71,8 @@ class PushEngine:
 
     def __init__(self, app, max_workers=5, rate_limit=30, retry_max=3, retry_delay=60):
         self.app = app
+        # max_workers 仅为兼容旧配置保留: 发送已改为单线程队列
+        # (SMTP 单连接不支持并发事务), 该值不再生效
         self.max_workers = max_workers
         self.rate_limit = rate_limit
         self.retry_max = retry_max
@@ -168,41 +175,40 @@ class PushEngine:
             email_sender = EmailSender(smtp_data, rate_limit=self.rate_limit)
             email_builder = EmailBuilder(smtp_data["sender_name"], smtp_data["sender_email"])
 
+            # SMTP 是串行协议, 一条连接同一时刻只能发一封, 并发只会让服务端
+            # 报 "Mailfrom may not be repeated" 并断连, 因此单线程消费队列。
+            # 可重试的失败带着下次尝试时间放回队尾, 不阻塞后面的邮件。
+            queue = deque((sub, 0, 0.0) for sub in subscribers_data)
+
             try:
-                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures = {}
-                    for sub in subscribers_data:
-                        if task.is_cancelled:
-                            break
+                while queue and not task.is_cancelled:
+                    sub, attempt, not_before = queue.popleft()
 
-                        future = executor.submit(
-                            self._send_single,
-                            email_sender,
-                            email_builder,
-                            report_data,
-                            sub,
-                            batch_id,
-                            extra_message,
-                        )
-                        futures[future] = sub
+                    wait = not_before - time.monotonic()
+                    if wait > 0 and task.wait_cancelled(wait):
+                        break
 
-                    for future in as_completed(futures):
-                        if task.is_cancelled:
-                            break
-
-                        sub = futures[future]
-                        try:
-                            success = future.result()
-                            if success:
-                                task.increment_success()
-                            else:
-                                task.increment_failed()
-                        except Exception:
-                            task.increment_failed()
+                    outcome = self._send_single(
+                        email_sender,
+                        email_builder,
+                        report_data,
+                        sub,
+                        batch_id,
+                        extra_message,
+                        attempt,
+                    )
+                    if outcome == "success":
+                        task.increment_success()
+                    elif outcome == "retry":
+                        delay = self.retry_delay * (2 ** attempt)
+                        queue.append((sub, attempt + 1, time.monotonic() + delay))
+                    else:
+                        task.increment_failed()
 
             finally:
                 email_sender.close()
-                task.status = "completed"
+                if not task.is_cancelled:
+                    task.status = "completed"
 
                 report = Report.query.get(report_data["id"])
                 if report:
@@ -219,63 +225,76 @@ class PushEngine:
                     task.failed,
                 )
 
-    def _send_single(self, email_sender, email_builder, report_data, sub_data, batch_id, extra_message):
-        with self.app.app_context():
-            log = SendLog.query.filter_by(
-                batch_id=batch_id,
-                subscriber_id=sub_data["id"],
-            ).first()
+    def _send_single(self, email_sender, email_builder, report_data, sub_data, batch_id, extra_message, attempt=0):
+        """尝试发送一封邮件, 返回 "success" / "retry" (可重试失败) / "failed"。
 
-            if not log:
-                return False
+        调用方 (_execute_push) 已持有 app context; 重试的排期由队列负责,
+        这里只做单次尝试。
+        """
+        log = SendLog.query.filter_by(
+            batch_id=batch_id,
+            subscriber_id=sub_data["id"],
+        ).first()
 
-            try:
-                log.status = "sending"
-                db.session.commit()
+        if not log:
+            return "failed"
 
-                message = email_builder.build_report_email(
-                    to_email=sub_data["email"],
-                    to_name=sub_data["name"],
-                    report_title=report_data["title"],
-                    report_summary=report_data["summary"] or "请查看附件",
-                    report_file_path=report_data["file_path"],
-                    extra_message=extra_message,
-                )
+        try:
+            log.status = "sending"
+            log.retry_count = attempt
+            db.session.commit()
 
-                email_sender.send_with_retry(
-                    message=message,
-                    recipient=sub_data["email"],
-                    max_retries=self.retry_max,
-                    base_delay=self.retry_delay,
-                )
+            message = email_builder.build_report_email(
+                to_email=sub_data["email"],
+                to_name=sub_data["name"],
+                report_title=report_data["title"],
+                report_summary=report_data["summary"] or "请查看附件",
+                report_file_path=report_data["file_path"],
+                extra_message=extra_message,
+            )
 
-                log.status = "success"
-                log.sent_at = datetime.now(timezone.utc)
-                db.session.commit()
+            email_sender.send(message, sub_data["email"])
 
-                return True
+            log.status = "success"
+            log.error_msg = ""
+            log.sent_at = datetime.now(timezone.utc)
+            db.session.commit()
 
-            except SendError as e:
-                log.status = "failed"
+            return "success"
+
+        except SendError as e:
+            if e.retryable and attempt < self.retry_max:
+                log.status = "retry"
                 log.error_msg = e.reason
-                log.retry_count = self.retry_max
                 db.session.commit()
+                logger.warning(
+                    "发送失败, 已排入重试 (%d/%d) [%s]: %s",
+                    attempt + 1,
+                    self.retry_max,
+                    sub_data["email"],
+                    e.reason,
+                )
+                return "retry"
 
-                if not e.retryable:
-                    subscriber = Subscriber.query.get(sub_data["id"])
-                    if subscriber:
-                        subscriber.status = "bounced"
-                        db.session.commit()
+            log.status = "failed"
+            log.error_msg = e.reason
+            db.session.commit()
 
-                logger.warning("发送失败 [%s]: %s", sub_data["email"], e.reason)
-                return False
+            if not e.retryable:
+                subscriber = Subscriber.query.get(sub_data["id"])
+                if subscriber:
+                    subscriber.status = "bounced"
+                    db.session.commit()
 
-            except Exception as e:
-                log.status = "failed"
-                log.error_msg = str(e)
-                db.session.commit()
-                logger.error("发送异常 [%s]: %s", sub_data["email"], e)
-                return False
+            logger.warning("发送失败 [%s]: %s", sub_data["email"], e.reason)
+            return "failed"
+
+        except Exception as e:
+            log.status = "failed"
+            log.error_msg = str(e)
+            db.session.commit()
+            logger.error("发送异常 [%s]: %s", sub_data["email"], e)
+            return "failed"
 
     def get_task_progress(self, batch_id):
         task = self._active_tasks.get(batch_id)
@@ -288,9 +307,10 @@ class PushEngine:
         if task:
             task.cancel()
             with self.app.app_context():
-                SendLog.query.filter_by(batch_id=batch_id, status="pending").update(
-                    {"status": "cancelled"}, synchronize_session="fetch"
-                )
+                SendLog.query.filter(
+                    SendLog.batch_id == batch_id,
+                    SendLog.status.in_(["pending", "retry"]),
+                ).update({"status": "cancelled"}, synchronize_session="fetch")
                 db.session.commit()
             return True
         return False

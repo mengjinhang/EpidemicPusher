@@ -112,6 +112,8 @@ class EmailSender:
 
     @contextmanager
     def _get_connection(self):
+        # 锁必须覆盖整个发送过程: SMTP 单连接上的事务不能交错,
+        # 并发 MAIL FROM 会被服务端以 454 拒绝并断连
         with self._lock:
             if not self._connection or not self._connection.is_alive():
                 if self._connection:
@@ -125,11 +127,11 @@ class EmailSender:
                     use_tls=self.smtp_config.get("use_tls", False),
                 )
                 self._connection.connect()
-        try:
-            yield self._connection._connection
-        except smtplib.SMTPServerDisconnected:
-            self._connection = None
-            raise
+            try:
+                yield self._connection._connection
+            except smtplib.SMTPServerDisconnected:
+                self._connection = None
+                raise
 
     def send(self, message, recipient):
         self.rate_limiter.acquire()
